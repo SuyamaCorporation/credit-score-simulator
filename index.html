@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>信用スコアシミュレータ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen p-4">
+<div class="max-w-2xl mx-auto">
+  <h1 class="text-2xl font-bold text-center mb-1">信用スコアシミュレータ</h1>
+  <p class="text-center text-gray-400 text-sm mb-6">🔒 入力データはどこにも送信されません（プライバシー保護）</p>
+
+  <div class="bg-gray-900 rounded-xl p-5 mb-6 space-y-5">
+    <h2 class="text-lg font-semibold text-blue-300">入力項目</h2>
+
+    <div>
+      <label class="block text-sm text-gray-300 mb-1" for="payment">支払い履歴（期日通り支払いの割合）</label>
+      <div class="flex items-center gap-3">
+        <input type="range" id="payment" min="0" max="100" value="95" class="flex-1 accent-blue-500" aria-label="支払い履歴">
+        <span id="paymentVal" class="w-14 text-right font-mono text-blue-300">95%</span>
+      </div>
+      <div class="text-xs text-gray-500 mt-1">重み: 35% — 最も重要な要素</div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-300 mb-1" for="utilization">クレジット使用率（利用残高 ÷ 限度額）</label>
+      <div class="flex items-center gap-3">
+        <input type="range" id="utilization" min="0" max="100" value="30" class="flex-1 accent-purple-500" aria-label="クレジット使用率">
+        <span id="utilizationVal" class="w-14 text-right font-mono text-purple-300">30%</span>
+      </div>
+      <div class="text-xs text-gray-500 mt-1">重み: 30% — 30%以下が理想</div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-300 mb-1" for="age">口座の平均年齢（年）</label>
+      <div class="flex items-center gap-3">
+        <input type="range" id="age" min="0" max="30" value="5" class="flex-1 accent-green-500" aria-label="口座の平均年齢">
+        <span id="ageVal" class="w-14 text-right font-mono text-green-300">5年</span>
+      </div>
+      <div class="text-xs text-gray-500 mt-1">重み: 15% — 長いほど有利</div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-300 mb-1" for="accounts">クレジット口座数</label>
+      <div class="flex items-center gap-3">
+        <input type="range" id="accounts" min="0" max="20" value="4" class="flex-1 accent-yellow-500" aria-label="クレジット口座数">
+        <span id="accountsVal" class="w-14 text-right font-mono text-yellow-300">4口座</span>
+      </div>
+      <div class="text-xs text-gray-500 mt-1">重み: 10% — 3〜6が最適</div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-300 mb-1" for="inquiries">直近2年の照会回数</label>
+      <div class="flex items-center gap-3">
+        <input type="range" id="inquiries" min="0" max="10" value="1" class="flex-1 accent-red-500" aria-label="直近2年の照会回数">
+        <span id="inquiriesVal" class="w-14 text-right font-mono text-red-300">1回</span>
+      </div>
+      <div class="text-xs text-gray-500 mt-1">重み: 10% — 少ないほど有利</div>
+    </div>
+  </div>
+
+  <!-- Score Display -->
+  <div class="bg-gray-900 rounded-xl p-5 mb-6 text-center">
+    <div class="text-sm text-gray-400 mb-2">推定信用スコア</div>
+    <div id="scoreDisplay" class="text-7xl font-bold mb-2 transition-all duration-500">750</div>
+    <div id="scoreLabel" class="text-xl font-semibold mb-4">Very Good</div>
+    <!-- Gauge -->
+    <div class="relative h-6 bg-gray-700 rounded-full overflow-hidden mb-2">
+      <div class="h-full rounded-full bg-gradient-to-r from-red-600 via-yellow-500 via-green-500 to-blue-500" style="width:100%"></div>
+      <div id="gaugePointer" class="absolute top-0 h-full w-1 bg-white opacity-80 transition-all duration-500" style="left:50%"></div>
+    </div>
+    <div class="flex justify-between text-xs text-gray-500 mb-1">
+      <span>300 低い</span><span>580</span><span>670</span><span>740</span><span>800</span><span>850 高い</span>
+    </div>
+  </div>
+
+  <!-- What-If Simulator -->
+  <div class="bg-gray-900 rounded-xl p-5 mb-6">
+    <h2 class="text-lg font-semibold text-blue-300 mb-3">What-If シミュレーション</h2>
+    <div id="whatif" class="space-y-2 text-sm"></div>
+  </div>
+
+  <!-- Tips -->
+  <div class="bg-gray-900 rounded-xl p-5">
+    <h2 class="text-lg font-semibold text-yellow-300 mb-3">改善のヒント</h2>
+    <ul id="tips" class="space-y-2 text-sm text-gray-300"></ul>
+  </div>
+</div>
+
+<script>
+const sliders = {
+  payment: { el: document.getElementById('payment'), val: document.getElementById('paymentVal'), suffix: '%' },
+  utilization: { el: document.getElementById('utilization'), val: document.getElementById('utilizationVal'), suffix: '%' },
+  age: { el: document.getElementById('age'), val: document.getElementById('ageVal'), suffix: '年' },
+  accounts: { el: document.getElementById('accounts'), val: document.getElementById('accountsVal'), suffix: '口座' },
+  inquiries: { el: document.getElementById('inquiries'), val: document.getElementById('inquiriesVal'), suffix: '回' }
+};
+
+function calcScore(p, u, a, ac, inq) {
+  // FICO-like weighted formula
+  const paymentScore = (p / 100) * 0.35;
+  const utilizationScore = (1 - Math.min(u / 100, 1)) * 0.30;
+  const ageScore = (Math.min(a, 20) / 20) * 0.15;
+  const accountsScore = (ac >= 3 && ac <= 6 ? 1 : ac < 3 ? ac / 3 : Math.max(0, 1 - (ac - 6) * 0.05)) * 0.10;
+  const inquiryScore = (1 - Math.min(inq, 6) / 6) * 0.10;
+  const total = paymentScore + utilizationScore + ageScore + accountsScore + inquiryScore;
+  return Math.round(300 + total * 550);
+}
+
+function getLabel(score) {
+  if (score < 580) return { label: 'Poor（要改善）', color: 'text-red-400' };
+  if (score < 670) return { label: 'Fair（普通）', color: 'text-orange-400' };
+  if (score < 740) return { label: 'Good（良い）', color: 'text-yellow-400' };
+  if (score < 800) return { label: 'Very Good（とても良い）', color: 'text-green-400' };
+  return { label: 'Exceptional（優秀）', color: 'text-blue-400' };
+}
+
+function update() {
+  const p = +sliders.payment.el.value;
+  const u = +sliders.utilization.el.value;
+  const a = +sliders.age.el.value;
+  const ac = +sliders.accounts.el.value;
+  const inq = +sliders.inquiries.el.value;
+
+  sliders.payment.val.textContent = p + '%';
+  sliders.utilization.val.textContent = u + '%';
+  sliders.age.val.textContent = a + '年';
+  sliders.accounts.val.textContent = ac + '口座';
+  sliders.inquiries.val.textContent = inq + '回';
+
+  const score = calcScore(p, u, a, ac, inq);
+  const { label, color } = getLabel(score);
+
+  document.getElementById('scoreDisplay').textContent = score;
+  document.getElementById('scoreDisplay').className = `text-7xl font-bold mb-2 transition-all duration-500 ${color}`;
+  document.getElementById('scoreLabel').textContent = label;
+  document.getElementById('scoreLabel').className = `text-xl font-semibold mb-4 ${color}`;
+
+  const pct = (score - 300) / 550 * 100;
+  document.getElementById('gaugePointer').style.left = pct + '%';
+
+  // What-if
+  const scenarios = [
+    { label: '支払い履歴を100%にすると', score: calcScore(100, u, a, ac, inq) },
+    { label: '使用率を10%にすると', score: calcScore(p, 10, a, ac, inq) },
+    { label: '口座年齢を10年にすると', score: calcScore(p, u, 10, ac, inq) },
+    { label: '照会回数を0にすると', score: calcScore(p, u, a, ac, 0) },
+  ];
+  const whatifEl = document.getElementById('whatif');
+  whatifEl.innerHTML = scenarios.map(s => {
+    const diff = s.score - score;
+    const arrow = diff > 0 ? `<span class="text-green-400">+${diff} ▲</span>` : diff < 0 ? `<span class="text-red-400">${diff} ▼</span>` : '<span class="text-gray-400">変化なし</span>';
+    return `<div class="flex justify-between items-center bg-gray-800 rounded px-3 py-2">
+      <span>${s.label}</span>
+      <span class="font-mono">${s.score} ${arrow}</span>
+    </div>`;
+  }).join('');
+
+  // Tips
+  const factorScores = [
+    { name: '支払い履歴', score: p, tip: '期日を1日も逃さないよう自動引落しを設定しましょう', bad: p < 90 },
+    { name: 'クレジット使用率', score: 100 - u, tip: '利用残高を限度額の30%以下に抑えましょう', bad: u > 30 },
+    { name: '口座年齢', score: Math.min(a * 5, 100), tip: '古いカードを解約せず維持すると有利です', bad: a < 5 },
+    { name: '照会回数', score: 100 - inq * 15, tip: '短期間に多数のクレジット申請を避けましょう', bad: inq > 2 },
+  ];
+  const badFactors = factorScores.filter(f => f.bad);
+  const tipsEl = document.getElementById('tips');
+  if (badFactors.length === 0) {
+    tipsEl.innerHTML = '<li class="text-green-400">✓ 全ての要素が良好な状態です！現状を維持しましょう。</li>';
+  } else {
+    tipsEl.innerHTML = badFactors.map(f =>
+      `<li class="flex gap-2"><span class="text-yellow-400 flex-shrink-0">⚠</span><span><strong>${f.name}</strong>: ${f.tip}</span></li>`
+    ).join('');
+  }
+}
+
+function savePrefs() {
+  localStorage.setItem('css_prefs', JSON.stringify({
+    payment: sliders.payment.el.value,
+    utilization: sliders.utilization.el.value,
+    age: sliders.age.el.value,
+    accounts: sliders.accounts.el.value,
+    inquiries: sliders.inquiries.el.value
+  }));
+}
+
+function loadPrefs() {
+  const saved = JSON.parse(localStorage.getItem('css_prefs') || 'null');
+  if (saved) {
+    Object.keys(sliders).forEach(k => { if (saved[k]) sliders[k].el.value = saved[k]; });
+  }
+}
+
+loadPrefs();
+Object.values(sliders).forEach(s => s.el.addEventListener('input', () => { update(); savePrefs(); }));
+update();
+</script>
+</body>
+</html>
